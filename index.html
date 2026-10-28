@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Колесо дейлика</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@500;700&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  /* Layout: the wheel owns the left two thirds on a soft tinted backdrop; the settings card sits to the right and stacks below on phones. */
+  :root {
+    --bg: #eef0f6;
+    --bg-glow-a: rgba(79, 124, 255, .28);
+    --bg-glow-b: rgba(255, 99, 99, .22);
+    --panel: #ffffff;
+    --fg: #1d2030;
+    --muted: #6d7285;
+    --line: #dde0ea;
+    --accent: #3b6fe8;
+    --accent-dark: #2a55bf;
+    --accent-fg: #ffffff;
+    --danger: #d9463e;
+    --danger-fg: #ffffff;
+    --pointer: #2b2f3f;
+    --shadow: 0 18px 50px rgba(30, 40, 90, .22);
+    --font-display: "Rubik", "Trebuchet MS", sans-serif;
+    --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161e; --bg-glow-a: rgba(79, 124, 255, .22); --bg-glow-b: rgba(255, 99, 99, .16);
+      --panel: #1f2230; --fg: #eceef5; --muted: #9ba1b5; --line: #343848;
+      --accent: #6b93f5; --accent-dark: #4f78de; --accent-fg: #0e1324; --pointer: #f2f3f7;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .5); color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161e; --bg-glow-a: rgba(79, 124, 255, .22); --bg-glow-b: rgba(255, 99, 99, .16);
+    --panel: #1f2230; --fg: #eceef5; --muted: #9ba1b5; --line: #343848;
+    --accent: #6b93f5; --accent-dark: #4f78de; --accent-fg: #0e1324; --pointer: #f2f3f7;
+    --shadow: 0 18px 50px rgba(0, 0, 0, .5); color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg) radial-gradient(60% 70% at 15% 20%, var(--bg-glow-a), transparent 70%),
+                radial-gradient(50% 60% at 90% 85%, var(--bg-glow-b), transparent 70%);
+    background-color: var(--bg);
+    color: var(--fg);
+    font: 15px/1.45 var(--font-body);
+    padding-block: 24px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .app {
+    max-width: 1120px; margin: 0 auto;
+    display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; align-items: start;
+  }
+  @media (max-width: 780px) { .app { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+
+  h1 {
+    font: 700 clamp(22px, 3vw, 30px)/1.15 var(--font-display);
+    margin: 0 0 16px; text-wrap: balance;
+  }
+  h1 input {
+    font: inherit; color: inherit; background: transparent; border: 0; border-bottom: 2px dashed transparent;
+    width: 100%; padding: 0; outline: none;
+  }
+  h1 input:hover, h1 input:focus { border-bottom-color: var(--line); }
+
+  .stage { position: relative; width: min(100%, 74vh); aspect-ratio: 1; margin: 0 auto; max-width: 100%; padding: 14px; }
+  .disc {
+    position: relative; width: 100%; height: 100%; border-radius: 50%;
+    box-shadow: var(--shadow), inset 0 0 0 6px rgba(255,255,255,.85), inset 0 0 0 7px rgba(0,0,0,.08);
+    background: var(--panel);
+  }
+  canvas { width: 100%; height: 100%; display: block; cursor: pointer; border-radius: 50%; }
+  canvas:focus-visible { outline: 3px solid var(--accent); outline-offset: 8px; }
+  .hub {
+    position: absolute; left: 50%; top: 50%; width: 18%; height: 18%; transform: translate(-50%, -50%);
+    border-radius: 50%; background: var(--panel);
+    box-shadow: 0 4px 14px rgba(0,0,0,.28), inset 0 0 0 3px rgba(0,0,0,.05);
+    pointer-events: none;
+  }
+  .hub::after {
+    content: ""; position: absolute; inset: 32%; border-radius: 50%;
+    background: var(--line);
+  }
+  .pointer {
+    position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+    width: 44px; height: 44px; pointer-events: none;
+    filter: drop-shadow(0 3px 4px rgba(0,0,0,.35));
+  }
+  .pointer svg { width: 100%; height: 100%; display: block; }
+  .hint {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font: 700 clamp(14px, 2vw, 20px)/1.2 var(--font-display); color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,.65); text-align: center; pointer-events: none;
+    transition: opacity .3s; width: 60%;
+  }
+  .hint small { font-weight: 500; opacity: .9; }
+  .hint.off { opacity: 0; }
+  .spin-row { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px; display: grid; gap: 12px; min-width: 0;
+    box-shadow: 0 10px 30px rgba(30, 40, 90, .10);
+  }
+  label.lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  textarea {
+    width: 100%; min-height: 220px; resize: vertical; font: 15px/1.5 var(--font-body);
+    color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  }
+  textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .count { color: var(--muted); font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font: 500 14px var(--font-body); color: var(--fg); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+  }
+  button:hover { border-color: var(--muted); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.primary {
+    background: linear-gradient(180deg, var(--accent), var(--accent-dark)); color: var(--accent-fg);
+    border-color: var(--accent-dark); font-weight: 700; font-size: 16px; padding: 11px 26px;
+    box-shadow: 0 6px 16px rgba(59, 111, 232, .35);
+  }
+  button.danger { background: var(--danger); color: var(--danger-fg); border-color: var(--danger); font-weight: 700; }
+  button:disabled { opacity: .5; cursor: default; box-shadow: none; }
+  .bench { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+  .bench .names { color: var(--fg); overflow-wrap: anywhere; }
+  .share { font-size: 13px; color: var(--muted); }
+  .share a { color: var(--accent); }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(10, 14, 30, .55); display: flex; align-items: center; justify-content: center;
+    padding: 16px; z-index: 20;
+  }
+  .modal {
+    background: var(--panel); color: var(--fg); border-radius: 16px; overflow: hidden; text-align: center;
+    max-width: 440px; width: 100%; box-shadow: 0 24px 70px rgba(0,0,0,.45);
+    animation: pop .25s ease-out;
+  }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } to { transform: none; opacity: 1; } }
+  .modal .head {
+    background: linear-gradient(180deg, var(--accent), var(--accent-dark)); color: var(--accent-fg);
+    font: 700 15px/1 var(--font-display); letter-spacing: .04em; text-transform: uppercase; padding: 14px 20px;
+  }
+  .modal .body { padding: 26px 28px 24px; display: grid; gap: 20px; }
+  .modal .who { font: 700 clamp(34px, 7vw, 52px)/1.1 var(--font-display); overflow-wrap: anywhere; }
+  .modal .row { justify-content: center; }
+  .modal .note { font-size: 13px; color: var(--muted); margin: -8px 0 0; }
+
+  #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 30; }
+
+  @media (prefers-reduced-motion: reduce) { .hint { transition: none; } .modal { animation: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <section>
+    <h1><input id="title" aria-label="Название колеса" placeholder="Название колеса"></h1>
+    <div class="stage">
+      <div class="disc">
+        <canvas id="wheel" tabindex="0" aria-label="Колесо. Нажми, чтобы крутить"></canvas>
+        <div class="hub"></div>
+        <div class="hint" id="hint">Жми, чтобы крутить<br><small>или Ctrl+Enter</small></div>
+      </div>
+      <div class="pointer" aria-hidden="true">
+        <svg viewBox="0 0 44 44"><path d="M42 6 L10 22 L42 38 Z" fill="var(--pointer)" stroke="rgba(255,255,255,.6)" stroke-width="2" stroke-linejoin="round"/></svg>
+      </div>
+    </div>
+    <div class="spin-row">
+      <button class="primary" id="spin">Крутить</button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <label class="lbl" for="names">Имена, по одному в строке</label>
+    <textarea id="names" spellcheck="false"></textarea>
+    <div class="count" id="count"></div>
+    <div class="row">
+      <button id="shuffle">Перемешать</button>
+      <button id="sort">По алфавиту</button>
+    </div>
+    <div class="bench" id="bench" hidden>
+      <div>Сняты с колеса на сегодня: <span class="names" id="benchNames"></span></div>
+      <div class="row"><button id="restore">Вернуть всех</button></div>
+    </div>
+    <div class="share">Список хранится в адресе страницы, поделиться колесом можно просто ссылкой.
+      <a href="#" id="copy">Скопировать ссылку</a></div>
+  </aside>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="winnerLabel">
+    <div class="head" id="winnerLabel">Сегодня ведёт</div>
+    <div class="body">
+      <div class="who" id="winner"></div>
+      <div class="row">
+        <button class="primary" id="again">Крутить ещё</button>
+        <button class="danger" id="removeWinner">Убрать и перекрутить</button>
+        <button id="close">Закрыть</button>
+      </div>
+      <p class="note">«Убрать» снимает имя с колеса до перезагрузки или кнопки «Вернуть всех». Список справа не меняется.</p>
+    </div>
+  </div>
+</div>
+<canvas id="confetti" hidden></canvas>
+
+<script>
+(function () {
+  const COLORS = ['#e4493d', '#3f8f48', '#2f6fde', '#f2b11a', '#8a4fc9', '#e86f1f', '#1aa3a0', '#d6407f'];
+  const DEFAULT_TITLE = 'Кто ведёт дейлик';
+  const DEFAULT_NAMES = ['Ксюша', 'Дима', 'Влад', 'Яр', 'Вадим', 'Света'];
+
+  const $ = id => document.getElementById(id);
+  const canvas = $('wheel'), ctx = canvas.getContext('2d');
+  const namesEl = $('names'), titleEl = $('title'), countEl = $('count'), hint = $('hint');
+  const benchEl = $('bench'), benchNames = $('benchNames');
+
+  // names = what is on the wheel right now; removed = winners taken off for today (not saved anywhere)
+  let names = [], removed = [], angle = 0, spinning = false, lastWinner = null;
+
+  // ---------- state: the URL hash is the source of truth, localStorage remembers the last one ----------
+  function readState() {
+    const fromHash = parseHash(location.hash);
+    if (fromHash) return fromHash;
+    try {
+      const saved = localStorage.getItem('daily-wheel');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* storage unavailable: fall through to defaults */ }
+    return { title: DEFAULT_TITLE, names: DEFAULT_NAMES.slice() };
+  }
+  function parseHash(hash) {
+    if (!hash || hash.length < 2) return null;
+    const p = new URLSearchParams(hash.slice(1));
+    if (!p.has('n')) return null;
+    return {
+      title: p.get('t') || DEFAULT_TITLE,
+      names: p.get('n').split('|').map(s => s.trim()).filter(Boolean)
+    };
+  }
+  function writeState() {
+    const state = { title: titleEl.value.trim() || DEFAULT_TITLE, names: listNames() };
+    const p = new URLSearchParams();
+    p.set('t', state.title);
+    p.set('n', state.names.join('|'));
+    history.replaceState(null, '', '#' + p.toString());
+    try { localStorage.setItem('daily-wheel', JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
+  }
+  function listNames() {
+    return namesEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+  }
+
+  // ---------- drawing ----------
+  function resize() {
+    const size = canvas.clientWidth;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr; canvas.height = size * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  function colorFor(i, total) {
+    // avoid the same colour on the first and last slice where they meet
+    if (total > 1 && i === total - 1 && (i % COLORS.length) === 0) return COLORS[1];
+    return COLORS[i % COLORS.length];
+  }
+  function shade(hex, amount) {
+    const n = parseInt(hex.slice(1), 16);
+    const ch = s => Math.max(0, Math.min(255, Math.round(s + amount)));
+    return `rgb(${ch(n >> 16)}, ${ch((n >> 8) & 255)}, ${ch(n & 255)})`;
+  }
+  function draw() {
+    const size = canvas.clientWidth, r = size / 2, cx = r, cy = r;
+    ctx.clearRect(0, 0, size, size);
+    const n = names.length;
+    if (n === 0) {
+      ctx.fillStyle = '#b5b9c7';
+      ctx.beginPath(); ctx.arc(cx, cy, r - 8, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+    const slice = (Math.PI * 2) / n;
+    const radius = r - 8;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    for (let i = 0; i < n; i++) {
+      const base = n === 1 ? COLORS[0] : colorFor(i, n);
+      const g = ctx.createRadialGradient(0, 0, radius * 0.15, 0, 0, radius);
+      g.addColorStop(0, shade(base, 38));
+      g.addColorStop(0.6, base);
+      g.addColorStop(1, shade(base, -28));
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, radius, i * slice, (i + 1) * slice);
+      ctx.closePath();
+      ctx.fillStyle = g;
+      ctx.fill();
+      if (n > 1) {
+        ctx.strokeStyle = 'rgba(255,255,255,.55)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+    const fontSize = Math.max(12, Math.min(r * 0.13, (r * 2.4) / Math.max(n, 6)));
+    ctx.font = `700 ${fontSize}px Rubik, "Trebuchet MS", sans-serif`;
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 4; ctx.shadowOffsetY = 1;
+    for (let i = 0; i < n; i++) {
+      ctx.save();
+      ctx.rotate(i * slice + slice / 2);
+      const maxW = radius * 0.64;
+      let label = names[i];
+      while (label.length > 1 && ctx.measureText(label).width > maxW) label = label.slice(0, -2) + '…';
+      ctx.fillText(label, radius - radius * 0.1, 0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // ---------- spinning ----------
+  function winnerIndex() {
+    const n = names.length, slice = (Math.PI * 2) / n;
+    // the pointer sits at angle 0 (3 o'clock); find the slice under it after rotation
+    const a = ((-angle) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    return Math.floor(a / slice) % n;
+  }
+  function spin() {
+    if (spinning || names.length < 2) return;
+    spinning = true;
+    hint.classList.add('off');
+    $('spin').disabled = true;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const duration = reduce ? 600 : 5000 + Math.random() * 1500;
+    const start = performance.now(), from = angle;
+    const turns = (reduce ? 1 : 5 + Math.random() * 3) * Math.PI * 2 + Math.random() * Math.PI * 2;
+    function frame(now) {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 4);
+      angle = from + turns * eased;
+      draw();
+      if (t < 1) { requestAnimationFrame(frame); return; }
+      angle %= Math.PI * 2;
+      spinning = false;
+      $('spin').disabled = false;
+      announce(names[winnerIndex()]);
+    }
+    requestAnimationFrame(frame);
+  }
+  function announce(name) {
+    lastWinner = name;
+    $('winner').textContent = name;
+    $('removeWinner').disabled = names.length < 3;
+    $('overlay').hidden = false;
+    $('again').focus();
+    confetti();
+  }
+  function closeModal() { $('overlay').hidden = true; canvas.focus(); }
+  function removeWinner() {
+    if (lastWinner === null) return;
+    removed.push(lastWinner);
+    lastWinner = null;
+    syncWheel();
+  }
+  function restoreAll() {
+    removed = [];
+    syncWheel();
+  }
+
+  // ---------- confetti ----------
+  function confetti() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const c = $('confetti'), g = c.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    c.width = innerWidth * dpr; c.height = innerHeight * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.hidden = false;
+    const bits = Array.from({ length: 140 }, () => ({
+      x: innerWidth / 2 + (Math.random() - .5) * 120, y: innerHeight / 2,
+      vx: (Math.random() - .5) * 14, vy: -Math.random() * 14 - 4,
+      w: 6 + Math.random() * 6, h: 8 + Math.random() * 8, rot: Math.random() * Math.PI, vr: (Math.random() - .5) * .3,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)]
+    }));
+    const start = performance.now();
+    (function frame(now) {
+      const t = (now - start) / 1000;
+      g.clearRect(0, 0, innerWidth, innerHeight);
+      for (const b of bits) {
+        b.vy += .35; b.x += b.vx; b.y += b.vy; b.rot += b.vr; b.vx *= .99;
+        g.save(); g.translate(b.x, b.y); g.rotate(b.rot); g.fillStyle = b.color; g.globalAlpha = Math.max(0, 1 - t / 2.4);
+        g.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); g.restore();
+      }
+      if (t < 2.5) requestAnimationFrame(frame); else { g.clearRect(0, 0, innerWidth, innerHeight); c.hidden = true; }
+    })(start);
+  }
+
+  // ---------- wiring ----------
+  function syncWheel() {
+    const all = listNames();
+    removed = removed.filter(r => all.includes(r));
+    names = all.filter(x => !removed.includes(x));
+    benchEl.hidden = removed.length === 0;
+    benchNames.textContent = removed.join(', ');
+    countEl.textContent = all.length === 0 ? 'Добавь хотя бы два имени'
+      : all.length === 1 ? 'Нужно ещё хотя бы одно имя'
+      : names.length < 2 ? `Имён в списке: ${all.length}, на колесе осталось ${names.length}`
+      : removed.length ? `Имён на колесе: ${names.length} из ${all.length}`
+      : `Имён на колесе: ${names.length}`;
+    $('spin').disabled = names.length < 2;
+    draw();
+    writeState();
+  }
+
+  const state = readState();
+  titleEl.value = state.title;
+  namesEl.value = state.names.join('\n');
+  document.title = state.title;
+
+  namesEl.addEventListener('input', syncWheel);
+  titleEl.addEventListener('input', () => { document.title = titleEl.value.trim() || DEFAULT_TITLE; writeState(); });
+  $('shuffle').addEventListener('click', () => {
+    const a = listNames();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    namesEl.value = a.join('\n'); syncWheel();
+  });
+  $('sort').addEventListener('click', () => {
+    namesEl.value = listNames().sort((x, y) => x.localeCompare(y, 'ru')).join('\n'); syncWheel();
+  });
+  $('restore').addEventListener('click', restoreAll);
+  $('copy').addEventListener('click', e => {
+    e.preventDefault();
+    const link = e.currentTarget, url = location.href;
+    const done = () => { link.textContent = 'Скопировано'; setTimeout(() => link.textContent = 'Скопировать ссылку', 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done, () => window.prompt('Ссылка на колесо', url));
+    else window.prompt('Ссылка на колесо', url);
+  });
+  canvas.addEventListener('click', spin);
+  canvas.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); spin(); } });
+  $('spin').addEventListener('click', spin);
+  $('again').addEventListener('click', () => { closeModal(); spin(); });
+  $('removeWinner').addEventListener('click', () => { removeWinner(); closeModal(); spin(); });
+  $('close').addEventListener('click', closeModal);
+  $('overlay').addEventListener('click', e => { if (e.target === $('overlay')) closeModal(); });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!$('overlay').hidden) closeModal(); spin(); }
+    if (e.key === 'Escape' && !$('overlay').hidden) closeModal();
+  });
+  window.addEventListener('hashchange', () => {
+    const s = parseHash(location.hash);
+    if (!s) return;
+    titleEl.value = s.title; namesEl.value = s.names.join('\n'); syncWheel();
+  });
+  window.addEventListener('resize', resize);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+
+  syncWheel();
+  resize();
+})();
+</script>
+</body>
+</html>
