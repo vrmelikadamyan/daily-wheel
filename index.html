@@ -24,6 +24,7 @@
     --shadow: 0 18px 50px rgba(30, 40, 90, .22);
     --font-display: "Rubik", "Trebuchet MS", sans-serif;
     --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+    color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -223,15 +224,17 @@
   const benchEl = $('bench'), benchNames = $('benchNames');
 
   // names = what is on the wheel right now; removed = winners taken off for today (not saved anywhere)
-  let names = [], removed = [], angle = 0, spinning = false, lastWinner = null;
+  let names = [], removed = [], angle = 0, spinning = false, lastWinner = null, hintSeen = false;
 
   // ---------- state: the URL hash is the source of truth, localStorage remembers the last one ----------
   function readState() {
     const fromHash = parseHash(location.hash);
     if (fromHash) return fromHash;
     try {
-      const saved = localStorage.getItem('daily-wheel');
-      if (saved) return JSON.parse(saved);
+      const saved = JSON.parse(localStorage.getItem('daily-wheel'));
+      if (saved && Array.isArray(saved.names)) {
+        return { title: String(saved.title || DEFAULT_TITLE), names: saved.names.filter(x => typeof x === 'string') };
+      }
     } catch (e) { /* storage unavailable: fall through to defaults */ }
     return { title: DEFAULT_TITLE, names: DEFAULT_NAMES.slice() };
   }
@@ -253,7 +256,12 @@
     try { localStorage.setItem('daily-wheel', JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
   }
   function listNames() {
-    return namesEl.value.split('\n').map(s => s.trim()).filter(Boolean);
+    // '|' separates names in the hash, so it cannot be part of a name; duplicates would make
+    // "remove winner" ambiguous, so the first occurrence wins
+    const seen = new Set();
+    return namesEl.value.split('\n')
+      .map(s => s.replace(/\|/g, ' ').trim())
+      .filter(s => s && !seen.has(s) && seen.add(s));
   }
 
   // ---------- drawing ----------
@@ -276,6 +284,7 @@
   }
   function draw() {
     const size = canvas.clientWidth, r = size / 2, cx = r, cy = r;
+    if (size < 32) return; // not laid out yet (hidden tab, first paint): nothing sensible to draw
     ctx.clearRect(0, 0, size, size);
     const n = names.length;
     if (n === 0) {
@@ -332,6 +341,7 @@
   function spin() {
     if (spinning || names.length < 2) return;
     spinning = true;
+    hintSeen = true;
     hint.classList.add('off');
     $('spin').disabled = true;
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -346,7 +356,7 @@
       if (t < 1) { requestAnimationFrame(frame); return; }
       angle %= Math.PI * 2;
       spinning = false;
-      $('spin').disabled = false;
+      $('spin').disabled = names.length < 2;
       announce(names[winnerIndex()]);
     }
     requestAnimationFrame(frame);
@@ -410,6 +420,7 @@
       : removed.length ? `Имён на колесе: ${names.length} из ${all.length}`
       : `Имён на колесе: ${names.length}`;
     $('spin').disabled = names.length < 2;
+    hint.classList.toggle('off', hintSeen || names.length < 2);
     draw();
     writeState();
   }
