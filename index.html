@@ -398,6 +398,13 @@
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
       audio = new AC();
+      // everything goes through a low-pass filter and a master gain: takes the edge off the synthesised tones
+      const filter = audio.createBiquadFilter();
+      filter.type = 'lowpass'; filter.frequency.value = 1800; filter.Q.value = 0.5;
+      const master = audio.createGain();
+      master.gain.value = 0.55;
+      filter.connect(master).connect(audio.destination);
+      audio.out = filter;
     }
     if (audio.state === 'suspended') audio.resume();
     return audio;
@@ -410,22 +417,22 @@
     gain.gain.setValueAtTime(0.0001, at);
     gain.gain.exponentialRampToValueAtTime(volume, at + attack);
     gain.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-    osc.connect(gain).connect(ac.destination);
+    osc.connect(gain).connect(ac.out);
     osc.start(at); osc.stop(at + dur + 0.02);
   }
   // one click of the pointer flapping over a peg; `strength` 0..1 follows the wheel speed
   function tick(strength) {
     const ac = audioCtx(); if (!ac) return;
-    tone(ac, { type: 'square', freq: 900 + 400 * strength, freqTo: 250, at: ac.currentTime, attack: 0.003, dur: 0.045, volume: 0.08 + 0.14 * strength });
+    tone(ac, { type: 'sine', freq: 520 + 180 * strength, freqTo: 180, at: ac.currentTime, attack: 0.005, dur: 0.055, volume: 0.05 + 0.1 * strength });
   }
   // short rising fanfare for the winner
   function fanfare() {
     const ac = audioCtx(); if (!ac) return;
     const t = ac.currentTime;
     [[523.25, 0], [659.25, 0.13], [783.99, 0.26]].forEach(([f, dt]) =>
-      tone(ac, { type: 'triangle', freq: f, at: t + dt, attack: 0.02, dur: 0.22, volume: 0.25 }));
+      tone(ac, { type: 'sine', freq: f, at: t + dt, attack: 0.04, dur: 0.24, volume: 0.16 }));
     [1046.5, 1318.5, 1568].forEach(f =>
-      tone(ac, { type: 'triangle', freq: f, at: t + 0.4, attack: 0.03, dur: 0.9, volume: 0.16 }));
+      tone(ac, { type: 'sine', freq: f, at: t + 0.4, attack: 0.06, dur: 1.0, volume: 0.09 }));
   }
   function setMuted(value) {
     muted = value;
